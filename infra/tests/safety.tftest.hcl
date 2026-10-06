@@ -78,12 +78,12 @@ run "live_cloud_run_identity_is_exact" {
   variables {
     dry_run                    = false
     services                   = ["cloud_run"]
-    cloud_run_service_accounts = ["app@janitor-test-123.iam.gserviceaccount.com"]
+    cloud_run_service_accounts = ["app-runner@janitor-test-123.iam.gserviceaccount.com"]
   }
   assert {
     condition = (length(google_service_account_iam_member.workload_identity) == 1 &&
-      google_service_account_iam_member.workload_identity["app@janitor-test-123.iam.gserviceaccount.com"].service_account_id ==
-    "projects/janitor-test-123/serviceAccounts/app@janitor-test-123.iam.gserviceaccount.com")
+      google_service_account_iam_member.workload_identity["app-runner@janitor-test-123.iam.gserviceaccount.com"].service_account_id ==
+    "projects/janitor-test-123/serviceAccounts/app-runner@janitor-test-123.iam.gserviceaccount.com")
     error_message = "Service-account use must be granted on exact workload identities."
   }
 }
