@@ -1,0 +1,20 @@
+{
+  "project_id": "ephemeral-demo-123",
+  "project_number": "123456789012",
+  "state_bucket": "ephemeral-demo-123-janitor-state",
+  "regions": ["us-central1"],
+  "zones": ["us-central1-a"],
+  "dry_run": true,
+  "mode": "stop",
+  "ttl_hours": 24,
+  "grace_hours": 24,
+  "max_actions_per_run": 10,
+  "max_actions_per_window": 10,
+  "window_seconds": 3600,
+  "scheduler_jobs": {
+    "projects/ephemeral-demo-123/locations/us-central1/jobs/temporary-task": {
+      "expires_at": "2026-12-01T18:00:00Z",
+      "owner": "platform"
+    }
+  }
+}

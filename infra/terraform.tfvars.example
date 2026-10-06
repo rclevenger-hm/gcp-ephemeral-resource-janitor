@@ -1,0 +1,29 @@
+project_id   = "ephemeral-demo-123"
+region       = "us-central1"
+regions      = ["us-central1"]
+zones        = ["us-central1-a"]
+state_bucket = "ephemeral-demo-123-janitor-state"
+# Replace this placeholder with the digest of your tested build.
+image = "us-central1-docker.pkg.dev/ephemeral-demo-123/janitor/runner@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+dry_run                = true
+scheduler_paused       = true
+mode                   = "stop"
+max_actions_per_run    = 10
+max_actions_per_window = 10
+window_seconds         = 3600
+grace_hours            = 24
+
+# Before enabling live cloud_run management, enumerate enrolled workload identities.
+cloud_run_service_accounts = ["ephemeral-app@ephemeral-demo-123.iam.gserviceaccount.com"]
+# Add exact workload image repositories here if the Cloud Run update permission check requires them.
+cloud_run_image_repositories = []
+
+scheduler_jobs = {
+  "projects/ephemeral-demo-123/locations/us-central1/jobs/demo-trigger" = {
+    expires_at = "2026-12-01T18:00:00Z"
+    owner      = "platform"
+  }
+}
+# Existing Cloud Monitoring notification channels; empty means incidents without delivery.
+notification_channels = []
