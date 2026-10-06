@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gcp-ephemeral-resource-janitor"
+version = "0.1.0"
+description = "Scheduled GCP workload cleanup with durable safety controls"
+requires-python = ">=3.12"
+dependencies = ["google-auth>=2.40,<3", "google-cloud-storage>=3.1,<4", "requests>=2.32,<3"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10", "responses>=0.25,<1", "ruff>=0.11,<1", "google-api-python-client>=2.180,<3"]
+
+[project.scripts]
+gcp-janitor = "janitor.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
