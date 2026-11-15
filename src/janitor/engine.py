@@ -78,7 +78,14 @@ def run(operator, request, gcp, store, *, run_id=None, clock=None, remaining=Non
             if wanted is not None and resource["id"] not in wanted:
                 continue
             entry = state["resources"].setdefault(resource["id"], {"first_seen_at": iso(clock())})
-            action, reason = evaluate(resource, copy.deepcopy(entry), policy, clock())
+            observed = copy.deepcopy(entry)
+            action, reason = evaluate(resource, observed, policy, clock())
+            if resource["kind"] == "compute" and "stop" in entry and "stop" not in observed:
+                # Persist only a loss of confirmed stop authority during discovery.
+                # A later discovery/read failure must not resurrect deletion grace.
+                # Do not copy new grace or re-arm non-VM quarantine actions here.
+                entry.pop("stop")
+                store.save_state(state)
             plans.append(
                 {
                     "id": resource["id"],
