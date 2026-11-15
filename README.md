@@ -64,6 +64,9 @@ manage the underlying Cloud Run service; no irreversible detach is performed.
   is not reported as confirmed completion. A VM must have a successful janitor
   stop operation, be observed stopped, remain unchanged and pass recovery grace
   (24 hours by default) before it can be deleted.
+- Discovery checkpoints any observed revocation of an already-confirmed VM stop,
+  even if discovery or a later read fails. It does not grant new stop/grace
+  authority or re-arm non-VM actions; uncertain checkpoint writes retain the lock.
 - Eligibility is refreshed before action. Cloud Run uses ETag preconditions;
   Compute/GKE/Scheduler APIs do not offer equivalent atomic eligibility guards.
   Compute mutations include a stable request UUID. API mutations are not retried
