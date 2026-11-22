@@ -305,3 +305,97 @@ def test_schedule_is_paused_before_compute_and_services(policy, store):
         )
     execute(policy, cloud, store)
     assert [action for _, action, _ in cloud.actions] == ["pause_job", "disable_service", "stop"]
+
+
+def confirmed_ttl_stop(policy, cloud, store):
+    """Establish real stop/grace history without changing any Compute labels later."""
+    policy = replace(policy, mode="lifecycle", ttl_hours=1)
+    resource = next(iter(cloud.resources.values()))
+    resource["labels"].pop("janitor-expires-at")
+    resource["labels"]["janitor-allow-delete"] = "true"
+    run(policy, {"dry_run": True}, cloud, store, clock=lambda: NOW - timedelta(hours=2))
+    execute(policy, cloud, store)
+    resource["status"] = "inactive"
+    resource["snapshot"].update(status="TERMINATED", last_stop=iso(NOW))
+    assert execute(policy, cloud, store)["reasons"] == {"recovery_grace": 1}
+    return policy, resource
+
+
+@pytest.mark.parametrize("interruption", ["discovery", "budget_policy", "refresh"])
+def test_observed_ttl_extension_durably_revokes_confirmed_stop(
+    policy, cloud, store, objects, interruption
+):
+    policy, resource = confirmed_ttl_stop(policy, cloud, store)
+    before = store.read("state.json")[0]
+    extended = replace(policy, ttl_hours=100)
+    if interruption == "discovery":
+        cloud.discovery_error = APIError(503)
+    elif interruption == "budget_policy":
+        extended = replace(extended, window_seconds=7200)
+    else:
+
+        def fail_refresh(resource):
+            raise APIError(503)
+
+        cloud.refresh_hook = fail_refresh
+    result = run(extended, {}, cloud, store, clock=lambda: NOW + timedelta(hours=25))
+    assert result["status"] == "failed"
+    durable = store.read("state.json")[0]
+    assert "stop" not in durable["resources"][resource["id"]]
+    assert (
+        durable["resources"][resource["id"]]["first_seen_at"]
+        == before["resources"][resource["id"]]["first_seen_at"]
+    )
+    assert durable["reservations"] == before["reservations"]
+    assert [action for _, action, _ in cloud.actions] == ["stop"]
+    cloud.discovery_error = None
+    cloud.refresh_hook = lambda resource: resource
+    # A new worker must not recover stale deletion authority when the extended TTL expires.
+    result = run(
+        replace(policy, ttl_hours=100),
+        {},
+        cloud,
+        Store(objects, policy),
+        clock=lambda: NOW + timedelta(hours=101),
+    )
+    assert result["reasons"] == {"no_confirmed_janitor_stop": 1}
+    assert [action for _, action, _ in cloud.actions] == ["stop"]
+
+
+def test_revocation_checkpoint_failure_retains_lock_and_prevents_actions(
+    policy, cloud, store, objects
+):
+    policy, resource = confirmed_ttl_stop(policy, cloud, store)
+    objects.fail = lambda key, body: (
+        key.endswith("state.json") and "stop" not in body["resources"][resource["id"]]
+    )
+    cloud.discovery_error = APIError(503)
+    with pytest.raises(StateError):
+        run(
+            replace(policy, ttl_hours=100),
+            {},
+            cloud,
+            store,
+            clock=lambda: NOW + timedelta(hours=25),
+        )
+    assert store.read("lock.json")[0]
+    assert [action for _, action, _ in cloud.actions] == ["stop"]
+    objects.fail = lambda key, body: False
+    with pytest.raises(RunLocked):
+        execute(policy, cloud, Store(objects, policy))
+
+
+def test_discovery_does_not_start_recovery_grace(policy, cloud, store):
+    policy = replace(policy, mode="lifecycle")
+    resource = next(iter(cloud.resources.values()))
+    resource["labels"]["janitor-allow-delete"] = "true"
+    execute(policy, cloud, store)
+    # Reconcile the stop while the VM is still transitioning to inactive.
+    execute(policy, cloud, store)
+    resource["status"] = "inactive"
+    resource["snapshot"].update(status="TERMINATED", last_stop=iso(NOW))
+    result = execute(replace(policy, window_seconds=7200), cloud, store)
+    assert result["error"] == "budget_policy_changed"
+    history = store.read("state.json")[0]["resources"][resource["id"]]["stop"]
+    assert "observed_stopped_at" not in history
+    assert [action for _, action, _ in cloud.actions] == ["stop"]
